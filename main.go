@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -75,6 +76,7 @@ func (t txn) Description() string {
 func (t txn) FilterValue() string { return t.Note }
 
 type model struct {
+	filename   string
 	txns       []txn
 	txnsList   list.Model
 	focusIndex int
@@ -90,13 +92,27 @@ func check(e error) {
 	}
 }
 
-func initialModel() model {
-	data, err := os.ReadFile("db")
-	check(err)
-
+func initialModel(filename string) model {
 	var txns []txn
-	err = json.Unmarshal(data, &txns)
-	check(err)
+
+	data, err := os.ReadFile(filename)
+
+	if errors.Is(err, os.ErrNotExist) {
+		file, err := os.Create(filename)
+		check(err)
+
+		txns = make([]txn, 0)
+		data, err := json.Marshal(txns)
+		check(err)
+
+		_, err = file.Write(data)
+		check(err)
+	} else {
+		check(err)
+
+		err = json.Unmarshal(data, &txns)
+		check(err)
+	}
 
 	delegate := list.NewDefaultDelegate()
 	delegate.Styles.SelectedTitle.Foreground(green).BorderForeground(green)
@@ -111,6 +127,7 @@ func initialModel() model {
 	list.SetShowTitle(false)
 
 	m := model{
+		filename:  filename,
 		txns:      txns,
 		txnsList:  list,
 		inputs:    make([]textinput.Model, 2),
@@ -200,7 +217,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				data, err := json.Marshal(m.txns)
 				check(err)
-				err = os.WriteFile("db", data, 0644)
+				err = os.WriteFile(m.filename, data, 0644)
 				check(err)
 
 				for i := range m.inputs {
@@ -364,7 +381,12 @@ func (m model) View() string {
 }
 
 func main() {
-	if _, err := tea.NewProgram(initialModel()).Run(); err != nil {
+	if len(os.Args) != 2 {
+		fmt.Println("Provide a file to store the transactions")
+		os.Exit(1)
+	}
+
+	if _, err := tea.NewProgram(initialModel(os.Args[1])).Run(); err != nil {
 		fmt.Printf("could not start program: %s\n", err)
 		os.Exit(1)
 	}

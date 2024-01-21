@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
@@ -55,23 +56,23 @@ const (
 )
 
 type txn struct {
-	note  string
-	value float64
-	kind  Kind
+	Note  string
+	Value float64
+	Kind  Kind
 }
 
-func (t txn) Title() string { return fmt.Sprintf("[%s]", t.note) }
+func (t txn) Title() string { return fmt.Sprintf("[%s]", t.Note) }
 func (t txn) Description() string {
-	switch t.kind {
+	switch t.Kind {
 	case Credit:
-		return fmt.Sprintf("+ %f", t.value)
+		return fmt.Sprintf("+ %f", t.Value)
 	case Debit:
-		return fmt.Sprintf("- %f", t.value)
+		return fmt.Sprintf("- %f", t.Value)
 	}
 
 	return ""
 }
-func (t txn) FilterValue() string { return t.note }
+func (t txn) FilterValue() string { return t.Note }
 
 type model struct {
 	txns       []txn
@@ -83,17 +84,34 @@ type model struct {
 	focusArea  FocusArea
 }
 
+func check(e error) {
+	if e != nil {
+		panic(e)
+	}
+}
+
 func initialModel() model {
+	data, err := os.ReadFile("db")
+	check(err)
+
+	var txns []txn
+	err = json.Unmarshal(data, &txns)
+	check(err)
 
 	delegate := list.NewDefaultDelegate()
 	delegate.Styles.SelectedTitle.Foreground(green).BorderForeground(green)
 	delegate.Styles.SelectedDesc.Foreground(green).BorderForeground(green)
 
-	list := list.New(make([]list.Item, 0), delegate, 0, 0)
+	items := make([]list.Item, len(txns))
+	for i, txn := range txns {
+		items[i] = txn
+	}
+
+	list := list.New(items, delegate, 0, 0)
 	list.SetShowTitle(false)
 
 	m := model{
-		txns:      make([]txn, 0),
+		txns:      txns,
 		txnsList:  list,
 		inputs:    make([]textinput.Model, 2),
 		focusArea: List,
@@ -170,17 +188,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				valueStr := m.inputs[1].Value()
 
 				value, err := strconv.ParseFloat(valueStr, 64)
-				if err != nil {
-					panic(err)
-				}
+				check(err)
 
 				new_txn := txn{
-					note:  note,
-					value: value,
-					kind:  m.kind,
+					Note:  note,
+					Value: value,
+					Kind:  m.kind,
 				}
 
 				m.txns = append(m.txns, new_txn)
+
+				data, err := json.Marshal(m.txns)
+				check(err)
+				err = os.WriteFile("db", data, 0644)
+				check(err)
 
 				for i := range m.inputs {
 					m.inputs[i].Reset()
@@ -261,11 +282,11 @@ func (m model) View() string {
 
 	var balance float64
 	for _, txn := range m.txns {
-		switch txn.kind {
+		switch txn.Kind {
 		case Credit:
-			balance += txn.value
+			balance += txn.Value
 		case Debit:
-			balance -= txn.value
+			balance -= txn.Value
 		}
 	}
 

@@ -63,16 +63,16 @@ type txn struct {
 }
 
 func (t txn) Title() string { return fmt.Sprintf("[%s]", t.Note) }
-func (t txn) Description() string {
-	switch t.Kind {
-	case Credit:
-		return fmt.Sprintf("+ %f", t.Value)
-	case Debit:
-		return fmt.Sprintf("- %f", t.Value)
-	}
 
-	return ""
+var kindString = map[Kind]string{
+	Credit: "+",
+	Debit:  "-",
 }
+
+func (t txn) Description() string {
+	return fmt.Sprintf("%s %f", kindString[t.Kind], t.Value)
+}
+
 func (t txn) FilterValue() string { return t.Note }
 
 type model struct {
@@ -135,25 +135,18 @@ func initialModel(filename string) model {
 		kind:      Credit,
 	}
 
-	var t textinput.Model
+	placeholders := []string{"Transaction Note", "Transaction Value"}
 	for i := range m.inputs {
-		t = textinput.New()
+		t := textinput.New()
 		t.Cursor.Style = cursorStyle
 		t.CharLimit = 32
-
-		switch i {
-		case 0:
-			t.Placeholder = "Transaction Note"
-			t.Focus()
-			t.PromptStyle = focusedStyle
-			t.TextStyle = focusedStyle
-			t.CharLimit = 64
-		case 1:
-			t.Placeholder = "Transaction Value"
-		}
+		t.Placeholder = placeholders[i]
 
 		m.inputs[i] = t
 	}
+	m.inputs[0].Focus()
+	m.inputs[0].PromptStyle = focusedStyle
+	m.inputs[0].TextStyle = focusedStyle
 
 	return m
 }
